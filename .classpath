@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="/tmp_amd/ravel/export/ravel/2/z3451444/2019T3/COMP9313/Labs/Hadoop-Core.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
