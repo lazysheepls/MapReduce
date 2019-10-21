@@ -45,10 +45,20 @@ public class AssignOne {
 			// Put all values into an array
 			int size = 0;
 			int cnt = 0;
-			// TRY
+
 			ArrayList<MovieAndRatingWritable> tempArrayList = new ArrayList<MovieAndRatingWritable>();
 			for(MovieAndRatingWritable value : values) {
-				tempArrayList.add(value);
+				Text movie_id = new Text(value.getMovieId());
+				IntWritable rating = new IntWritable(value.getRating().get());
+				tempArrayList.add(new MovieAndRatingWritable(movie_id,rating));
+				//Debug
+				//System.out.println("Newly created: key " + key.toString() + " movie " + movie_id.toString() + " and rating " + rating.toString());
+			}
+
+			//Debug
+			for(MovieAndRatingWritable e:tempArrayList) {
+				//Debug
+				System.out.println("In arryList: movie " + e.getMovieId().toString() + " and rating " + e.getRating().toString());
 			}
 			
 			Object[] tempObjectArray = tempArrayList.toArray();
@@ -59,8 +69,10 @@ public class AssignOne {
 			= new MovieAndRatingArrayWritable(tempMovieAndRatingArray);
 			
 			context.write(key, movieAndRatingArrayWritable);
+			
 			//Debug
-			System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
+			System.out.println("ArrayWritable is: " + movieAndRatingArrayWritable.toString());
+			//System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
 		}
 	}
 	// Mapper 2
@@ -153,7 +165,7 @@ public class AssignOne {
 		job1.setMapOutputValueClass(MovieAndRatingWritable.class);
 		job1.setOutputKeyClass(Text.class);
 		job1.setOutputValueClass(MovieAndRatingArrayWritable.class);
-		job1.setOutputFormatClass(SequenceFileOutputFormat.class); //?????
+		//job1.setOutputFormatClass(SequenceFileOutputFormat.class); //?????
 		FileInputFormat.addInputPath(job1, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job1, new Path(out,"out1"));
 		
