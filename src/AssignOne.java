@@ -51,8 +51,6 @@ public class AssignOne {
 				Text movie_id = new Text(value.getMovieId());
 				IntWritable rating = new IntWritable(value.getRating().get());
 				tempArrayList.add(new MovieAndRatingWritable(movie_id,rating));
-				//Debug
-				//System.out.println("Newly created: key " + key.toString() + " movie " + movie_id.toString() + " and rating " + rating.toString());
 			}
 
 			//Debug
@@ -75,9 +73,7 @@ public class AssignOne {
 			//System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
 		}
 	}
-	// Mapper 2
-	// Reducer 2
-	// Custom Writable
+	// Custom Value
 	public static class MovieAndRatingWritable implements Writable{
 		
 		private Text _movie_id;
@@ -125,7 +121,7 @@ public class AssignOne {
 		
 		
 	}
-	// Custom ArrayWritable
+	// Custom Array Value
 	public static class MovieAndRatingArrayWritable extends ArrayWritable{
 
 		// Constructor
@@ -151,6 +147,168 @@ public class AssignOne {
 			return string;
 		}
 	}
+	// Mapper 2
+	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingArrayWritable>{
+		
+	}
+	// Custom Key
+	@SuppressWarnings("rawtypes")
+	public static class MoviePair implements WritableComparable{
+		
+		private Text _movie_id_1;
+		private Text _movie_id_2;
+		
+		// Constructor
+		public MoviePair() {
+			_movie_id_1 = new Text();
+			_movie_id_2 = new Text();
+		}
+		
+		public MoviePair(Text movie_id_1, Text movie_id_2) {
+			_movie_id_1 = movie_id_1;
+			_movie_id_2 = movie_id_2;
+		}
+		
+		// Getter
+		public Text getMovieId1() {
+			return _movie_id_1;
+		}
+		
+		public Text getMovieId2() {
+			return _movie_id_2;
+		}
+		
+		// Setter
+		public void setMovieId1(Text movie_id_1) {
+			this._movie_id_1 = movie_id_1;
+		}
+		
+		public void setMovieId2(Text movie_id_2) {
+			this._movie_id_2 = movie_id_2;
+		}
+
+		@Override
+		public void readFields(DataInput in) throws IOException {
+			_movie_id_1.readFields(in);
+			_movie_id_2.readFields(in);
+		}
+
+		@Override
+		public void write(DataOutput out) throws IOException {
+			_movie_id_1.write(out);
+			_movie_id_2.write(out);
+		}
+		
+		@Override
+		public int compareTo(Object moviePair) {
+			Text movieId1 = ((MoviePair)moviePair)._movie_id_1;
+			Text movieId2 = ((MoviePair)moviePair)._movie_id_2;
+			return (this._movie_id_1 == movieId1) && (this._movie_id_2 == movieId2)?1:0;
+		}
+
+		@Override
+		public String toString() {
+			return "(" + _movie_id_1.toString() + "," + _movie_id_2.toString() + ")";
+		}
+	}
+	// Custom Value
+	public static class UserAndRatingWritable implements Writable{
+		private Text _user_id;
+		private IntWritable _rating_1;
+		private IntWritable _rating_2;
+		
+		// Constructor
+		public UserAndRatingWritable() {
+			_user_id = new Text();
+			_rating_1 = new IntWritable();
+			_rating_2 = new IntWritable();
+		}
+		
+		public UserAndRatingWritable(Text user_id, IntWritable rating_1, IntWritable rating_2) {
+			_user_id = user_id;
+			_rating_1 = rating_1;
+			_rating_2 = rating_2;
+		}
+		
+		// Getter
+		public Text getUserId() {
+			return _user_id;
+		}
+		
+		public IntWritable getRating1() {
+			return _rating_1;
+		}
+		
+		public IntWritable getRating2() {
+			return _rating_2;
+		}
+		
+		// Setter
+		public void setUserId(Text user_id) {
+			this._user_id = user_id;
+		}
+		
+		public void setRating1(IntWritable rating_1) {
+			this._rating_1 = rating_1;
+		}
+		
+		public void setRating2(IntWritable rating_2) {
+			this._rating_2 = rating_2;
+		}
+
+		@Override
+		public void readFields(DataInput in) throws IOException {
+			_user_id.readFields(in);
+			_rating_1.readFields(in);
+			_rating_2.readFields(in);
+		}
+
+		@Override
+		public void write(DataOutput out) throws IOException {
+			_user_id.write(out);
+			_rating_1.write(out);
+			_rating_2.write(out);
+		}
+		
+		@Override
+		public String toString() {
+			return "(" + _user_id.toString() + "," + _rating_1.toString() + "," + _rating_2.toString() + ")";
+		}
+	}
+	// Custom Array Value
+	public static class UserAndRatingArrayWritable extends ArrayWritable{
+		// Constructor
+		public UserAndRatingArrayWritable() {
+			super(UserAndRatingWritable.class);
+		}
+		
+		public UserAndRatingArrayWritable(UserAndRatingWritable[] values) {
+			super(UserAndRatingWritable.class, values);
+		}
+
+		@Override
+		public UserAndRatingWritable[] get() {
+			return (UserAndRatingWritable[])super.get();
+		}
+
+		@Override
+		public String toString() {
+			UserAndRatingWritable[] values = get();
+			String string = "";
+			for(int i = 0;i < values.length;i++) {
+				if (i == 0) string += "[";
+				string += values[i].toString();
+				if (i == values.length) {
+					string += "]";
+				}else {
+					string += ",";
+				}
+			}
+			return super.toString();
+		}
+		
+		
+	}
 	// Main
 	public static void main(String[] args) throws Exception {
 		Configuration conf = new Configuration();
@@ -165,7 +323,7 @@ public class AssignOne {
 		job1.setMapOutputValueClass(MovieAndRatingWritable.class);
 		job1.setOutputKeyClass(Text.class);
 		job1.setOutputValueClass(MovieAndRatingArrayWritable.class);
-		//job1.setOutputFormatClass(SequenceFileOutputFormat.class); //?????
+		//job1.setOutputFormatClass(SequenceFileOutputFormat.class); //Enable when need to pass object to the 2nd MapReduce, else print to file
 		FileInputFormat.addInputPath(job1, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job1, new Path(out,"out1"));
 		
