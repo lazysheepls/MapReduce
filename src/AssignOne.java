@@ -3,6 +3,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.*;
@@ -148,9 +152,62 @@ public class AssignOne {
 		}
 	}
 	// Mapper 2
-	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingArrayWritable>{
+	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>{
+
+		@Override
+		protected void map(Text key, MovieAndRatingArrayWritable values,
+				Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>.Context context)
+				throws IOException, InterruptedException {
+			// Add to unsorted ArrayList
+			ArrayList<MovieAndRatingWritable> movieAndRatingArrayList = new ArrayList<MovieAndRatingWritable>();
+			for(MovieAndRatingWritable value:values.get()) {
+				Text movie_id = new Text(value.getMovieId());
+				IntWritable rating = new IntWritable(value.getRating().get());
+				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
+				movieAndRatingArrayList.add(movieAndRatingWritable);
+				// Debug
+				System.out.println("Mapper2 - movie/rating unsoreted arraylist: added " + movie_id.toString() + " and " + rating.toString());
+			}
+			// Sort
+			MoviePairComparator moviePairComparator = new MoviePairComparator();
+			Collections.sort(movieAndRatingArrayList, moviePairComparator);
+			System.out.println("Mapper2 - movie/rating sorted result: " + movieAndRatingArrayList.toString());
+
+			// Find movie pairs
+			int size = movieAndRatingArrayList.size();
+			for (int i=0;i<size-1;i++) {
+				for(int j=1;j<size;j++) {
+					// Key
+					Text movie_id_1 = new Text(movieAndRatingArrayList.get(i).getMovieId());
+					Text movie_id_2 = new Text(movieAndRatingArrayList.get(j).getMovieId());
+					
+					MoviePair moviePair = new MoviePair(movie_id_1, movie_id_2);
+					// Value
+					Text user_id = new Text(key);
+					IntWritable rating_1 = new IntWritable(movieAndRatingArrayList.get(i).getRating().get());
+					IntWritable rating_2 = new IntWritable(movieAndRatingArrayList.get(j).getRating().get());
+					
+					UserAndRatingWritable userAndRatignWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
+					context.write(moviePair, userAndRatignWritable);
+				}
+			}
+		}
 		
 	}
+	// Custom Comparator
+	public static class MoviePairComparator implements Comparator<MovieAndRatingWritable>{
+
+		@Override
+		public int compare(MovieAndRatingWritable in1, MovieAndRatingWritable in2) {
+			Text movie_id_1 = new Text(in1.getMovieId());
+			Text movie_id_2 = new Text(in2.getMovieId());
+			
+			return movie_id_1.compareTo(movie_id_2);
+		}
+		
+	}
+	// Reducer 2
+	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{}
 	// Custom Key
 	@SuppressWarnings("rawtypes")
 	public static class MoviePair implements WritableComparable{
