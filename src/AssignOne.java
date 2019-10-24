@@ -18,6 +18,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 
 public class AssignOne {
 	// Mapper 1: From input to key:user_id, value:(movie_id,rating)
@@ -459,6 +461,7 @@ public class AssignOne {
 		job2.setMapOutputValueClass(UserAndRatingWritable.class);
 		job2.setOutputKeyClass(MoviePair.class);
 		job2.setOutputValueClass(UserAndRatingArrayWritable.class);
+		job2.setInputFormatClass(SequenceFileInputFormat.class);
 		FileInputFormat.addInputPath(job2, new Path(temp_folder.toString()));
 		FileOutputFormat.setOutputPath(job2, new Path(args[1]));
 		
