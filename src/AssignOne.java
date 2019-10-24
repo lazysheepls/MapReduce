@@ -96,7 +96,7 @@ public class AssignOne {
 			_movie_id = movie_id;
 			_rating = rating;
 		}
-		// Getter
+		
 		public Text getMovieId() {
 			return _movie_id;
 		}
@@ -142,7 +142,12 @@ public class AssignOne {
 
 		@Override
 		public MovieAndRatingWritable[] get() {
-			return (MovieAndRatingWritable[])super.get();
+			Writable[] writableArray = super.get();
+			MovieAndRatingWritable[] movieAndRatingWritableArray = new MovieAndRatingWritable[writableArray.length];
+			for(int i=0;i<writableArray.length;i++) {
+				movieAndRatingWritableArray[i] = (MovieAndRatingWritable)writableArray[i];
+			}
+			return movieAndRatingWritableArray;
 		}
 		
 		@Override
@@ -164,14 +169,16 @@ public class AssignOne {
 				throws IOException, InterruptedException {
 			// Add to unsorted ArrayList
 			ArrayList<MovieAndRatingWritable> movieAndRatingArrayList = new ArrayList<MovieAndRatingWritable>();
-			for(MovieAndRatingWritable value:values.get()) {
-				Text movie_id = new Text(value.getMovieId());
-				IntWritable rating = new IntWritable(value.getRating().get());
+			MovieAndRatingWritable[] tempArray = values.get();
+			for(int i=0; i<tempArray.length;i++) {
+				Text movie_id = new Text(tempArray[i].getMovieId());
+				IntWritable rating = new IntWritable(tempArray[i].getRating().get());
 				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
 				movieAndRatingArrayList.add(movieAndRatingWritable);
 				// DEGUB
 				System.out.println("Mapper2 - movie/rating unsoreted arraylist: added " + movie_id.toString() + " and " + rating.toString());
 			}
+
 			// Sort
 			MoviePairComparator moviePairComparator = new MoviePairComparator();
 			Collections.sort(movieAndRatingArrayList, moviePairComparator);
@@ -230,8 +237,10 @@ public class AssignOne {
 			}
 			
 			// DEGUB
+			System.out.println("Movie " + key.toString());
 			for(UserAndRatingWritable e:tempArrayList) {
-				System.out.println("Reducer 2 in tempArrayList: user" + e.getUserId().toString() + " rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
+				System.out.println("Reducer 2 in tempArrayList: user " + e.getUserId().toString() +
+						" rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
 			}
 			
 			Object[] tempObjectArray = tempArrayList.toArray();
@@ -300,7 +309,7 @@ public class AssignOne {
 		public int compareTo(Object moviePair) {
 			Text movieId1 = ((MoviePair)moviePair)._movie_id_1;
 			Text movieId2 = ((MoviePair)moviePair)._movie_id_2;
-			return (this._movie_id_1 == movieId1) && (this._movie_id_2 == movieId2)?1:0;
+			return movieId1.compareTo(movieId2);
 		}
 
 		@Override
@@ -385,7 +394,12 @@ public class AssignOne {
 
 		@Override
 		public UserAndRatingWritable[] get() {
-			return (UserAndRatingWritable[])super.get();
+			Writable[] writableArray = super.get();
+			UserAndRatingWritable[] userAndRatingWritableArray = new UserAndRatingWritable[writableArray.length];
+			for(int i=0; i<writableArray.length;i++) {
+				userAndRatingWritableArray[i] = (UserAndRatingWritable)writableArray[i];
+			}
+			return userAndRatingWritableArray;
 		}
 
 		@Override
@@ -395,13 +409,13 @@ public class AssignOne {
 			for(int i = 0;i < values.length;i++) {
 				if (i == 0) string += "[";
 				string += values[i].toString();
-				if (i == values.length) {
+				if (i == values.length - 1) {
 					string += "]";
 				}else {
 					string += ",";
 				}
 			}
-			return super.toString();
+			return string;
 		}
 		
 		
@@ -413,7 +427,7 @@ public class AssignOne {
 		if(temp_folder_to_delete.exists()) {
 			FileUtils.cleanDirectory(temp_folder_to_delete);
 			FileUtils.deleteDirectory(temp_folder_to_delete);
-//			temp_folder_to_delete.delete();
+
 			// DEBUG
 			if(!temp_folder_to_delete.exists())
 				System.out.println("Folder " + temp_folder_to_delete.getName()+ " deleted.");
@@ -423,7 +437,7 @@ public class AssignOne {
 		if(output_folder_to_delete.exists()) {
 			FileUtils.cleanDirectory(output_folder_to_delete);
 			FileUtils.deleteDirectory(output_folder_to_delete);
-//			output_folder_to_delete.delete();
+
 			// DEBUG
 			if (!output_folder_to_delete.exists())
 				System.out.println("Folder " + output_folder_to_delete.getName()+ " deleted.");
@@ -445,10 +459,6 @@ public class AssignOne {
 		FileInputFormat.addInputPath(job1, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job1, new Path(temp_folder.toString()));
 		
-//		FileSystem hdfs = FileSystem.get(conf);
-//		if(hdfs.exists(out)) {
-//			hdfs.delete(out,true);
-//		}
 		if(!job1.waitForCompletion(true)) {
 			System.exit(1);
 		}
