@@ -1,5 +1,6 @@
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,6 +9,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -34,7 +36,7 @@ public class AssignOne {
 			MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
 			
 			context.write(user_id, movieAndRatingWritable);
-			//Debug
+			// DEBUG
 			System.out.println("Mapper added key: " + user_id.toString() + " value: " + movieAndRatingWritable.toString());
 		}
 		
@@ -57,9 +59,9 @@ public class AssignOne {
 				tempArrayList.add(new MovieAndRatingWritable(movie_id,rating));
 			}
 
-			//Debug
+			// DEBUG
 			for(MovieAndRatingWritable e:tempArrayList) {
-				//Debug
+				// DEBUG
 				System.out.println("In arryList: movie " + e.getMovieId().toString() + " and rating " + e.getRating().toString());
 			}
 			
@@ -72,7 +74,7 @@ public class AssignOne {
 			
 			context.write(key, movieAndRatingArrayWritable);
 			
-			//Debug
+			// DEGUB
 			System.out.println("ArrayWritable is: " + movieAndRatingArrayWritable.toString());
 			//System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
 		}
@@ -165,7 +167,7 @@ public class AssignOne {
 				IntWritable rating = new IntWritable(value.getRating().get());
 				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
 				movieAndRatingArrayList.add(movieAndRatingWritable);
-				// Debug
+				// DEGUB
 				System.out.println("Mapper2 - movie/rating unsoreted arraylist: added " + movie_id.toString() + " and " + rating.toString());
 			}
 			// Sort
@@ -207,7 +209,43 @@ public class AssignOne {
 		
 	}
 	// Reducer 2
-	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{}
+	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{
+
+		@Override
+		protected void reduce(MoviePair key, Iterable<UserAndRatingWritable> values,
+				Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>.Context context)
+				throws IOException, InterruptedException {
+			// Put all values into an array
+			int size = 0;
+			int cnt = 0;
+			
+			ArrayList<UserAndRatingWritable> tempArrayList = new ArrayList<UserAndRatingWritable>();
+			for(UserAndRatingWritable value:values) {
+				Text user_id = new Text(value.getUserId());
+				IntWritable rating_1 = new IntWritable(value.getRating1().get());
+				IntWritable rating_2 = new IntWritable(value.getRating2().get());
+				tempArrayList.add(new UserAndRatingWritable(user_id, rating_1, rating_2));
+			}
+			
+			// DEGUB
+			for(UserAndRatingWritable e:tempArrayList) {
+				System.out.println("Reducer 2 in tempArrayList: user" + e.getUserId().toString() + " rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
+			}
+			
+			Object[] tempObjectArray = tempArrayList.toArray();
+			UserAndRatingWritable[] tempUserAndRatingArray
+			= Arrays.copyOf(tempObjectArray, tempObjectArray.length, UserAndRatingWritable[].class);
+			
+			UserAndRatingArrayWritable userAndRatingArrayWritable
+			= new UserAndRatingArrayWritable(tempUserAndRatingArray);
+			
+			context.write(key, userAndRatingArrayWritable);
+			
+			// DEGUB
+			System.out.println("Reducer2 ArrayWritable is: " + userAndRatingArrayWritable.toString());
+		}
+		
+	}
 	// Custom Key
 	@SuppressWarnings("rawtypes")
 	public static class MoviePair implements WritableComparable{
@@ -368,8 +406,29 @@ public class AssignOne {
 	}
 	// Main
 	public static void main(String[] args) throws Exception {
+		// Delete old folders
+		File temp_folder_to_delete = new File("TEMP");
+		if(temp_folder_to_delete.exists()) {
+			FileUtils.cleanDirectory(temp_folder_to_delete);
+			FileUtils.deleteDirectory(temp_folder_to_delete);
+//			temp_folder_to_delete.delete();
+			// DEBUG
+			if(!temp_folder_to_delete.exists())
+				System.out.println("Folder " + temp_folder_to_delete.getName()+ " deleted.");
+		}
+		
+		File output_folder_to_delete = new File("output");
+		if(output_folder_to_delete.exists()) {
+			FileUtils.cleanDirectory(output_folder_to_delete);
+			FileUtils.deleteDirectory(output_folder_to_delete);
+//			output_folder_to_delete.delete();
+			// DEBUG
+			if (!output_folder_to_delete.exists())
+				System.out.println("Folder " + output_folder_to_delete.getName()+ " deleted.");
+		}
+		// Init
 		Configuration conf = new Configuration();
-		Path out = new Path(args[1]);
+		Path temp_folder = new Path("TEMP");
 		
 		// Map Reduce 1
 		Job job1 = Job.getInstance(conf,"MapReduce1");
@@ -380,17 +439,31 @@ public class AssignOne {
 		job1.setMapOutputValueClass(MovieAndRatingWritable.class);
 		job1.setOutputKeyClass(Text.class);
 		job1.setOutputValueClass(MovieAndRatingArrayWritable.class);
-		//job1.setOutputFormatClass(SequenceFileOutputFormat.class); //Enable when need to pass object to the 2nd MapReduce, else print to file
+		job1.setOutputFormatClass(SequenceFileOutputFormat.class); //Enable when need to pass object to the 2nd MapReduce, else print to file
 		FileInputFormat.addInputPath(job1, new Path(args[0]));
-		FileOutputFormat.setOutputPath(job1, new Path(out,"out1"));
+		FileOutputFormat.setOutputPath(job1, new Path(temp_folder.toString()));
 		
-		FileSystem hdfs = FileSystem.get(conf);
-		if(hdfs.exists(out)) {
-			hdfs.delete(out,true);
-		}
+//		FileSystem hdfs = FileSystem.get(conf);
+//		if(hdfs.exists(out)) {
+//			hdfs.delete(out,true);
+//		}
 		if(!job1.waitForCompletion(true)) {
 			System.exit(1);
 		}
 		// Map Reduce 2
+		Job job2 = Job.getInstance(conf,"MapReduce2");
+		job2.setJarByClass(AssignOne.class);
+		job2.setMapperClass(Mapper2.class);
+		job2.setReducerClass(Reducer2.class);
+		job2.setMapOutputKeyClass(MoviePair.class);
+		job2.setMapOutputValueClass(UserAndRatingWritable.class);
+		job2.setOutputKeyClass(MoviePair.class);
+		job2.setOutputValueClass(UserAndRatingArrayWritable.class);
+		FileInputFormat.addInputPath(job2, new Path(temp_folder.toString()));
+		FileOutputFormat.setOutputPath(job2, new Path(args[1]));
+		
+		if(!job2.waitForCompletion(true)) {
+			System.exit(1);
+		}
 	}
 }
