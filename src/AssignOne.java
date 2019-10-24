@@ -192,14 +192,16 @@ public class AssignOne {
 					Text movie_id_1 = new Text(movieAndRatingArrayList.get(i).getMovieId());
 					Text movie_id_2 = new Text(movieAndRatingArrayList.get(j).getMovieId());
 					
+					if (movie_id_1.equals(movie_id_2)) break;
+					
 					MoviePair moviePair = new MoviePair(movie_id_1, movie_id_2);
 					// Value
 					Text user_id = new Text(key);
 					IntWritable rating_1 = new IntWritable(movieAndRatingArrayList.get(i).getRating().get());
 					IntWritable rating_2 = new IntWritable(movieAndRatingArrayList.get(j).getRating().get());
 					
-					UserAndRatingWritable userAndRatignWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
-					context.write(moviePair, userAndRatignWritable);
+					UserAndRatingWritable userAndRatingWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
+					context.write(moviePair, userAndRatingWritable);
 				}
 			}
 		}
@@ -417,8 +419,6 @@ public class AssignOne {
 			}
 			return string;
 		}
-		
-		
 	}
 	// Main
 	public static void main(String[] args) throws Exception {
