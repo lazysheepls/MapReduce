@@ -39,7 +39,7 @@ public class AssignOne {
 			
 			context.write(user_id, movieAndRatingWritable);
 			// DEBUG
-			System.out.println("Mapper added key: " + user_id.toString() + " value: " + movieAndRatingWritable.toString());
+			System.out.println("Mapper1 -  added key: " + user_id.toString() + " value: " + movieAndRatingWritable.toString());
 		}
 		
 	}
@@ -62,9 +62,10 @@ public class AssignOne {
 			}
 
 			// DEBUG
+			System.out.println("Reducer1 key:" + key.toString());
 			for(MovieAndRatingWritable e:tempArrayList) {
 				// DEBUG
-				System.out.println("In arryList: movie " + e.getMovieId().toString() + " and rating " + e.getRating().toString());
+				System.out.println("value - in arryList: movie " + e.getMovieId().toString() + " and rating " + e.getRating().toString());
 			}
 			
 			Object[] tempObjectArray = tempArrayList.toArray();
@@ -77,9 +78,106 @@ public class AssignOne {
 			context.write(key, movieAndRatingArrayWritable);
 			
 			// DEGUB
-			System.out.println("ArrayWritable is: " + movieAndRatingArrayWritable.toString());
+			System.out.println("Reducer1 arrayWritable is: " + movieAndRatingArrayWritable.toString());
 			//System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
 		}
+	}
+	// Mapper 2
+	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>{
+
+		@Override
+		protected void map(Text key, MovieAndRatingArrayWritable values,
+				Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>.Context context)
+				throws IOException, InterruptedException {
+			
+			// Copy movie and rating array writable to a local arrayList
+			ArrayList<MovieAndRatingWritable> movieAndRatingArrayList = new ArrayList<MovieAndRatingWritable>();
+			MovieAndRatingWritable[] tempArray = values.get();
+			
+			// DEBUG
+			System.out.println("Mapper2 - movie/rating unsorted:");
+			
+			for(int i=0; i<tempArray.length;i++) {
+				Text movie_id = new Text(tempArray[i].getMovieId());
+				IntWritable rating = new IntWritable(tempArray[i].getRating().get());
+				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
+				movieAndRatingArrayList.add(movieAndRatingWritable);
+				
+				// DEBUG
+				System.out.println("Added " + movieAndRatingWritable.toString());
+			}
+
+			// Sort
+			MoviePairComparator moviePairComparator = new MoviePairComparator();
+			Collections.sort(movieAndRatingArrayList, moviePairComparator);
+			System.out.println("Mapper2 - movie/rating !sorted!: " + movieAndRatingArrayList.toString());
+
+			// Find movie pairs
+			int size = movieAndRatingArrayList.size();
+			for (int i=0;i<size-1;i++) {
+				for(int j=i+1;j<size;j++) {
+					// DEBUG
+					System.out.println("! Movie pair found, user " + key.toString() + " i: " + Integer.toString(i) + " j: " + Integer.toString(j));
+					// New key
+					Text movie_id_1 = new Text(movieAndRatingArrayList.get(i).getMovieId());
+					Text movie_id_2 = new Text(movieAndRatingArrayList.get(j).getMovieId());
+					
+					if (movie_id_1.equals(movie_id_2)) break;
+					
+					MoviePair moviePair = new MoviePair(movie_id_1, movie_id_2);
+					// New value
+					Text user_id = new Text(key);
+					IntWritable rating_1 = new IntWritable(movieAndRatingArrayList.get(i).getRating().get());
+					IntWritable rating_2 = new IntWritable(movieAndRatingArrayList.get(j).getRating().get());
+					
+					// Add to Mapper2 output
+					UserAndRatingWritable userAndRatingWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
+					context.write(moviePair, userAndRatingWritable);
+					// DEBUG
+					System.out.println("Mapper2 - New key and value" + moviePair.toString() + " " + userAndRatingWritable.toString());
+				}
+			}
+		}
+	}
+	// Reducer 2
+	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{
+
+		@Override
+		protected void reduce(MoviePair key, Iterable<UserAndRatingWritable> values,
+				Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>.Context context)
+				throws IOException, InterruptedException {
+			// Put all values into an array
+			int size = 0;
+			int cnt = 0;
+			
+			ArrayList<UserAndRatingWritable> tempArrayList = new ArrayList<UserAndRatingWritable>();
+			for(UserAndRatingWritable value:values) {
+				Text user_id = new Text(value.getUserId());
+				IntWritable rating_1 = new IntWritable(value.getRating1().get());
+				IntWritable rating_2 = new IntWritable(value.getRating2().get());
+				tempArrayList.add(new UserAndRatingWritable(user_id, rating_1, rating_2));
+			}
+			
+			// DEGUB
+			System.out.println("Reducer2 movie " + key.toString());
+			for(UserAndRatingWritable e:tempArrayList) {
+				System.out.println("In tempArrayList: user " + e.getUserId().toString() +
+						" rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
+			}
+			
+			Object[] tempObjectArray = tempArrayList.toArray();
+			UserAndRatingWritable[] tempUserAndRatingArray
+			= Arrays.copyOf(tempObjectArray, tempObjectArray.length, UserAndRatingWritable[].class);
+			
+			UserAndRatingArrayWritable userAndRatingArrayWritable
+			= new UserAndRatingArrayWritable(tempUserAndRatingArray);
+			
+			context.write(key, userAndRatingArrayWritable);
+			
+			// DEGUB
+			System.out.println("Reducer2 ArrayWritable is: " + userAndRatingArrayWritable.toString());
+		}
+		
 	}
 	// Custom Value
 	public static class MovieAndRatingWritable implements Writable{
@@ -123,7 +221,6 @@ public class AssignOne {
 		}
 		@Override
 		public String toString() {
-			// TODO Auto-generated method stub
 			return _movie_id.toString() + "," + _rating.toString();
 		}
 		
@@ -160,53 +257,6 @@ public class AssignOne {
 			return string;
 		}
 	}
-	// Mapper 2
-	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>{
-
-		@Override
-		protected void map(Text key, MovieAndRatingArrayWritable values,
-				Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>.Context context)
-				throws IOException, InterruptedException {
-			// Add to unsorted ArrayList
-			ArrayList<MovieAndRatingWritable> movieAndRatingArrayList = new ArrayList<MovieAndRatingWritable>();
-			MovieAndRatingWritable[] tempArray = values.get();
-			for(int i=0; i<tempArray.length;i++) {
-				Text movie_id = new Text(tempArray[i].getMovieId());
-				IntWritable rating = new IntWritable(tempArray[i].getRating().get());
-				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
-				movieAndRatingArrayList.add(movieAndRatingWritable);
-				// DEGUB
-				System.out.println("Mapper2 - movie/rating unsoreted arraylist: added " + movie_id.toString() + " and " + rating.toString());
-			}
-
-			// Sort
-			MoviePairComparator moviePairComparator = new MoviePairComparator();
-			Collections.sort(movieAndRatingArrayList, moviePairComparator);
-			System.out.println("Mapper2 - movie/rating sorted result: " + movieAndRatingArrayList.toString());
-
-			// Find movie pairs
-			int size = movieAndRatingArrayList.size();
-			for (int i=0;i<size-1;i++) {
-				for(int j=1;j<size;j++) {
-					// Key
-					Text movie_id_1 = new Text(movieAndRatingArrayList.get(i).getMovieId());
-					Text movie_id_2 = new Text(movieAndRatingArrayList.get(j).getMovieId());
-					
-					if (movie_id_1.equals(movie_id_2)) break;
-					
-					MoviePair moviePair = new MoviePair(movie_id_1, movie_id_2);
-					// Value
-					Text user_id = new Text(key);
-					IntWritable rating_1 = new IntWritable(movieAndRatingArrayList.get(i).getRating().get());
-					IntWritable rating_2 = new IntWritable(movieAndRatingArrayList.get(j).getRating().get());
-					
-					UserAndRatingWritable userAndRatingWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
-					context.write(moviePair, userAndRatingWritable);
-				}
-			}
-		}
-		
-	}
 	// Custom Comparator
 	public static class MoviePairComparator implements Comparator<MovieAndRatingWritable>{
 
@@ -216,46 +266,6 @@ public class AssignOne {
 			Text movie_id_2 = new Text(in2.getMovieId());
 			
 			return movie_id_1.compareTo(movie_id_2);
-		}
-		
-	}
-	// Reducer 2
-	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{
-
-		@Override
-		protected void reduce(MoviePair key, Iterable<UserAndRatingWritable> values,
-				Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>.Context context)
-				throws IOException, InterruptedException {
-			// Put all values into an array
-			int size = 0;
-			int cnt = 0;
-			
-			ArrayList<UserAndRatingWritable> tempArrayList = new ArrayList<UserAndRatingWritable>();
-			for(UserAndRatingWritable value:values) {
-				Text user_id = new Text(value.getUserId());
-				IntWritable rating_1 = new IntWritable(value.getRating1().get());
-				IntWritable rating_2 = new IntWritable(value.getRating2().get());
-				tempArrayList.add(new UserAndRatingWritable(user_id, rating_1, rating_2));
-			}
-			
-			// DEGUB
-			System.out.println("Movie " + key.toString());
-			for(UserAndRatingWritable e:tempArrayList) {
-				System.out.println("Reducer 2 in tempArrayList: user " + e.getUserId().toString() +
-						" rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
-			}
-			
-			Object[] tempObjectArray = tempArrayList.toArray();
-			UserAndRatingWritable[] tempUserAndRatingArray
-			= Arrays.copyOf(tempObjectArray, tempObjectArray.length, UserAndRatingWritable[].class);
-			
-			UserAndRatingArrayWritable userAndRatingArrayWritable
-			= new UserAndRatingArrayWritable(tempUserAndRatingArray);
-			
-			context.write(key, userAndRatingArrayWritable);
-			
-			// DEGUB
-			System.out.println("Reducer2 ArrayWritable is: " + userAndRatingArrayWritable.toString());
 		}
 		
 	}
