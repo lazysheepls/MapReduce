@@ -321,7 +321,16 @@ public class AssignOne {
 		public int compareTo(Object moviePair) {
 			Text movieId1 = ((MoviePair)moviePair)._movie_id_1;
 			Text movieId2 = ((MoviePair)moviePair)._movie_id_2;
-			return movieId1.compareTo(movieId2);
+			int result = 0;
+			
+			// movie1 is different, use movie1 to compare
+			if (!movieId1.equals(_movie_id_1)) result = movieId1.compareTo(_movie_id_1);
+			// movie1 is the same, movie2 is different
+			else if (!movieId2.equals(_movie_id_2)) result = movieId2.compareTo(_movie_id_2);
+			// Both pair are identical, use movie1 to compare
+			else result = movieId1.compareTo(_movie_id_1);
+			
+			return result;
 		}
 
 		@Override
