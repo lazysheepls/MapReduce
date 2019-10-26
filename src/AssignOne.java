@@ -4,152 +4,150 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 
 public class AssignOne {
-	// Mapper 1: From input to key:user_id, value:(movie_id,rating)
-	public static class Mapper1 extends Mapper<LongWritable,Text,Text,MovieAndRatingWritable>{
-
+	/**
+	 * UserMapper: Maps the input file to key-value pairs
+	 * 1. Extract info from the file, only interested in user_id, movie_id and rating
+	 * 2. Create key from user_id
+	 * 3. Create value of type MovieAndRatingWritable (custom)
+	 * 4. Add to the output
+	 * e.g. Input U2::M3::1::11111111 | Output key - U2, value - (M3,1)
+	 */
+	public static class UserMapper extends Mapper<LongWritable,Text,Text,MovieAndRatingWritable>{
 		@Override
 		protected void map(LongWritable key, Text value, Mapper<LongWritable, Text, Text, MovieAndRatingWritable>.Context context)
 				throws IOException, InterruptedException {
 			// Process input (0:user_id,1:movie_id,2:rating,3:timestamp)
 			String[] inputs = value.toString().split("::");
+			
 			// Key: user_id
 			Text user_id = new Text(inputs[0]);
-			// Value: Create movie and rating writable as the value
+			
+			// Value: movie and rating (store into custom writable)
 			Text movie_id = new Text(inputs[1]);
 			IntWritable rating = new IntWritable(Integer.parseInt(inputs[2]));
 			MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
 			
 			context.write(user_id, movieAndRatingWritable);
-			// DEBUG
-			System.out.println("Mapper1 -  added key: " + user_id.toString() + " value: " + movieAndRatingWritable.toString());
-		}
-		
+		}	
 	}
-	// Reducer 1
-	public static class Reducer1 extends Reducer<Text, MovieAndRatingWritable, Text, MovieAndRatingArrayWritable>{
+	
+	/**
+	 * UserReducer: Find movies watched by the same user
+	 * 1. Make a deep copy of the iterable values input to an intermediate array list
+	 * 2. Convert the intermediate array list to an array
+	 * 3. Use the generated array to create the MovieAndRatingArrayWritable(custom)
+	 * 4. Add to the output
+	 * e.g. Input - U2,(M3,1) and U2,(M4,3), output key - U2, value - [(M3,1),(M4,3)]
+	 */
+	public static class UserReducer extends Reducer<Text, MovieAndRatingWritable, Text, MovieAndRatingArrayWritable>{
 
 		@Override
 		protected void reduce(Text key, Iterable<MovieAndRatingWritable> values,
 				Reducer<Text, MovieAndRatingWritable, Text, MovieAndRatingArrayWritable>.Context context)
 				throws IOException, InterruptedException {
-			// Put all values into an array
-			int size = 0;
-			int cnt = 0;
-
+			// Deep copy of the iterable values to an intermediate array list
 			ArrayList<MovieAndRatingWritable> tempArrayList = new ArrayList<MovieAndRatingWritable>();
 			for(MovieAndRatingWritable value : values) {
 				Text movie_id = new Text(value.getMovieId());
 				IntWritable rating = new IntWritable(value.getRating().get());
 				tempArrayList.add(new MovieAndRatingWritable(movie_id,rating));
 			}
-
-			// DEBUG
-			System.out.println("Reducer1 key:" + key.toString());
-			for(MovieAndRatingWritable e:tempArrayList) {
-				// DEBUG
-				System.out.println("value - in arryList: movie " + e.getMovieId().toString() + " and rating " + e.getRating().toString());
-			}
 			
+			// Convert array list to array
 			Object[] tempObjectArray = tempArrayList.toArray();
-			MovieAndRatingWritable[] tempMovieAndRatingArray 
+			MovieAndRatingWritable[] movieAndRatingArray 
 			= Arrays.copyOf(tempObjectArray, tempObjectArray.length, MovieAndRatingWritable[].class);
-
+			
+			// Create MovieAndRatingArrayWritable(custom) from the array generated before
 			MovieAndRatingArrayWritable movieAndRatingArrayWritable 
-			= new MovieAndRatingArrayWritable(tempMovieAndRatingArray);
+			= new MovieAndRatingArrayWritable(movieAndRatingArray);
 			
 			context.write(key, movieAndRatingArrayWritable);
-			
-			// DEGUB
-			System.out.println("Reducer1 arrayWritable is: " + movieAndRatingArrayWritable.toString());
-			//System.out.println("Reducer find key: " + key.toString() + " watched " + Integer.toString(tempMovieAndRatingArray.length) + " movies");
 		}
 	}
-	// Mapper 2
-	public static class Mapper2 extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>{
-
+	
+	/**
+	 * MoviePairMapper: Find movie pairs and their ratings
+	 * 1. Deep copy movieAndRatingArrayWritable into intermediate array list
+	 * 2. Sort the array list by movie id to make sure movie pairs are created in the order
+	 * 3. Iterate through the array list to find valid movie pairs
+	 * 4. Create key - MoviePair(custom), value - UserAndRatingWritable(custom)
+	 * 5. Add to the output
+	 * e.g. Input U2,(M1,3),(M3,4) Output key - (M1,M3), value - (U2,3,4)
+	 */
+	public static class MoviePairMapper extends Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>{
 		@Override
 		protected void map(Text key, MovieAndRatingArrayWritable values,
 				Mapper<Text, MovieAndRatingArrayWritable, MoviePair, UserAndRatingWritable>.Context context)
 				throws IOException, InterruptedException {
 			
-			// Copy movie and rating array writable to a local arrayList
+			// Copy movie and rating array writable to an intermediate arrayList
 			ArrayList<MovieAndRatingWritable> movieAndRatingArrayList = new ArrayList<MovieAndRatingWritable>();
 			MovieAndRatingWritable[] tempArray = values.get();
-			
-			// DEBUG
-			System.out.println("Mapper2 - movie/rating unsorted:");
 			
 			for(int i=0; i<tempArray.length;i++) {
 				Text movie_id = new Text(tempArray[i].getMovieId());
 				IntWritable rating = new IntWritable(tempArray[i].getRating().get());
 				MovieAndRatingWritable movieAndRatingWritable = new MovieAndRatingWritable(movie_id,rating);
 				movieAndRatingArrayList.add(movieAndRatingWritable);
-				
-				// DEBUG
-				System.out.println("Added " + movieAndRatingWritable.toString());
 			}
 
-			// Sort
-			MoviePairComparator moviePairComparator = new MoviePairComparator();
-			Collections.sort(movieAndRatingArrayList, moviePairComparator);
-			System.out.println("Mapper2 - movie/rating !sorted!: " + movieAndRatingArrayList.toString());
+			// Sort movie_id to avoid redundant movie pairs (e.g (M1,M2) and (M2,M1) should be the same)
+			MovieIdComparator movieIdComparator = new MovieIdComparator();
+			Collections.sort(movieAndRatingArrayList, movieIdComparator);
 
 			// Find movie pairs
 			int size = movieAndRatingArrayList.size();
 			for (int i=0;i<size-1;i++) {
 				for(int j=i+1;j<size;j++) {
-					// DEBUG
-					System.out.println("! Movie pair found, user " + key.toString() + " i: " + Integer.toString(i) + " j: " + Integer.toString(j));
-					// New key
+					// Create key - MoviePair
 					Text movie_id_1 = new Text(movieAndRatingArrayList.get(i).getMovieId());
 					Text movie_id_2 = new Text(movieAndRatingArrayList.get(j).getMovieId());
-					
-					if (movie_id_1.equals(movie_id_2)) break;
-					
+					if (movie_id_1.equals(movie_id_2)) break; // ignore movie pairs that has the same id
 					MoviePair moviePair = new MoviePair(movie_id_1, movie_id_2);
-					// New value
+					
+					// Create value - UserAndRatingWritable(custom)
 					Text user_id = new Text(key);
 					IntWritable rating_1 = new IntWritable(movieAndRatingArrayList.get(i).getRating().get());
 					IntWritable rating_2 = new IntWritable(movieAndRatingArrayList.get(j).getRating().get());
-					
-					// Add to Mapper2 output
 					UserAndRatingWritable userAndRatingWritable = new UserAndRatingWritable(user_id,rating_1,rating_2);
+					
 					context.write(moviePair, userAndRatingWritable);
-					// DEBUG
-					System.out.println("Mapper2 - New key and value" + moviePair.toString() + " " + userAndRatingWritable.toString());
 				}
 			}
 		}
 	}
-	// Reducer 2
-	public static class Reducer2 extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{
+	
+	/**
+	 * MoviePairReducer: Find movies watched by the same user
+	 * 1. Make a deep copy of the iterable values input to an intermediate array list
+	 * 2. Convert the intermediate array list to an array
+	 * 3. Use the generated array to create the UserAndRatingArrayWritable(custom)
+	 * 4. Add to the output
+	 * e.g. Input - (M2,M3),(U1,1,2) and (M2,M3),(U2,3,4), output key - (M2,M3), value - [(U1,1,2),(U2,3,4)]
+	 */
+	public static class MoviePairReducer extends Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>{
 
 		@Override
 		protected void reduce(MoviePair key, Iterable<UserAndRatingWritable> values,
 				Reducer<MoviePair, UserAndRatingWritable, MoviePair, UserAndRatingArrayWritable>.Context context)
 				throws IOException, InterruptedException {
-			// Put all values into an array
-			int size = 0;
-			int cnt = 0;
 			
+			// Deep copy the iteratable values into an intermediate array list
 			ArrayList<UserAndRatingWritable> tempArrayList = new ArrayList<UserAndRatingWritable>();
 			for(UserAndRatingWritable value:values) {
 				Text user_id = new Text(value.getUserId());
@@ -158,28 +156,23 @@ public class AssignOne {
 				tempArrayList.add(new UserAndRatingWritable(user_id, rating_1, rating_2));
 			}
 			
-			// DEGUB
-			System.out.println("Reducer2 movie " + key.toString());
-			for(UserAndRatingWritable e:tempArrayList) {
-				System.out.println("In tempArrayList: user " + e.getUserId().toString() +
-						" rating1: " + e.getRating1().toString() + " rating2: " + e.getRating2());
-			}
-			
+			// Convert array list to array
 			Object[] tempObjectArray = tempArrayList.toArray();
 			UserAndRatingWritable[] tempUserAndRatingArray
 			= Arrays.copyOf(tempObjectArray, tempObjectArray.length, UserAndRatingWritable[].class);
 			
+			// Create UserAndRatingArrayWritable(custom) from the array generated before
 			UserAndRatingArrayWritable userAndRatingArrayWritable
 			= new UserAndRatingArrayWritable(tempUserAndRatingArray);
 			
 			context.write(key, userAndRatingArrayWritable);
-			
-			// DEGUB
-			System.out.println("Reducer2 ArrayWritable is: " + userAndRatingArrayWritable.toString());
 		}
-		
 	}
-	// Custom Value
+	
+	/**
+	 * MovieAndRatingWritable - used by UserMapper/Reducer
+	 * A tuple contains movie id and rating
+	 */
 	public static class MovieAndRatingWritable implements Writable{
 		
 		private Text _movie_id;
@@ -190,17 +183,21 @@ public class AssignOne {
 			_movie_id = new Text();
 			_rating = new IntWritable();
 		}
+		
+		// Explicit Constructor
 		public MovieAndRatingWritable(Text movie_id, IntWritable rating) {
 			_movie_id = movie_id;
 			_rating = rating;
 		}
 		
+		// Getter
 		public Text getMovieId() {
 			return _movie_id;
 		}
 		public IntWritable getRating() {
 			return _rating;
 		}
+		
 		// Setter
 		public void setMovieId(Text movie_id) {
 			this._movie_id = movie_id;
@@ -208,6 +205,7 @@ public class AssignOne {
 		public void setRating(IntWritable rating) {
 			this._rating = rating;
 		}
+		
 		@Override
 		public void readFields(DataInput in) throws IOException {
 			_movie_id.readFields(in);
@@ -219,24 +217,30 @@ public class AssignOne {
 			_movie_id.write(out);
 			_rating.write(out);
 		}
+		
 		@Override
 		public String toString() {
 			return _movie_id.toString() + "," + _rating.toString();
 		}
-		
-		
 	}
-	// Custom Array Value
+	
+	/**
+	 * MovieAndRatingArrayWritable - used by UserReducer and MoviePairMapper
+	 * An arrayWritable of the movie and rating tuples
+	 */
 	public static class MovieAndRatingArrayWritable extends ArrayWritable{
 
 		// Constructor
 		public MovieAndRatingArrayWritable() {
 			super(MovieAndRatingWritable.class);
 		}
+		
+		// Explicit Constructor
 		public MovieAndRatingArrayWritable(MovieAndRatingWritable[] values) {
 			super(MovieAndRatingWritable.class, values);
 		}
-
+		
+		// Getter
 		@Override
 		public MovieAndRatingWritable[] get() {
 			Writable[] writableArray = super.get();
@@ -257,9 +261,12 @@ public class AssignOne {
 			return string;
 		}
 	}
-	// Custom Comparator
-	public static class MoviePairComparator implements Comparator<MovieAndRatingWritable>{
-
+	
+	/**
+	 * MovieIdComparator - used by MoviePairMapper
+	 * Compare two movieAndRatingWritable by comparing their movie ids
+	 */
+	public static class MovieIdComparator implements Comparator<MovieAndRatingWritable>{
 		@Override
 		public int compare(MovieAndRatingWritable in1, MovieAndRatingWritable in2) {
 			Text movie_id_1 = new Text(in1.getMovieId());
@@ -267,9 +274,12 @@ public class AssignOne {
 			
 			return movie_id_1.compareTo(movie_id_2);
 		}
-		
 	}
-	// Custom Key
+	
+	/**
+	 * MoviePair - used by MoviePairMapper/Reducer
+	 * A tuple contains two movie ids, used as the key
+	 */
 	@SuppressWarnings("rawtypes")
 	public static class MoviePair implements WritableComparable{
 		
@@ -282,6 +292,7 @@ public class AssignOne {
 			_movie_id_2 = new Text();
 		}
 		
+		// Explicit Constructor
 		public MoviePair(Text movie_id_1, Text movie_id_2) {
 			_movie_id_1 = movie_id_1;
 			_movie_id_2 = movie_id_2;
@@ -327,7 +338,7 @@ public class AssignOne {
 			if (!movieId1.equals(_movie_id_1)) result = movieId1.compareTo(_movie_id_1);
 			// movie1 is the same, movie2 is different
 			else if (!movieId2.equals(_movie_id_2)) result = movieId2.compareTo(_movie_id_2);
-			// Both pair are identical, use movie1 to compare
+			// Both pair are identical, still use movie1 to compare
 			else result = movieId1.compareTo(_movie_id_1);
 			
 			return result;
@@ -338,7 +349,11 @@ public class AssignOne {
 			return "(" + _movie_id_1.toString() + "," + _movie_id_2.toString() + ")";
 		}
 	}
-	// Custom Value
+	
+	/**
+	 * UserAndRatingWritable - used by UserMapper/Reducer
+	 * A triplet consists of user id, rating of movie 1 and rating of movie 2
+	 */
 	public static class UserAndRatingWritable implements Writable{
 		private Text _user_id;
 		private IntWritable _rating_1;
@@ -351,6 +366,7 @@ public class AssignOne {
 			_rating_2 = new IntWritable();
 		}
 		
+		// Explicit Constructor
 		public UserAndRatingWritable(Text user_id, IntWritable rating_1, IntWritable rating_2) {
 			_user_id = user_id;
 			_rating_1 = rating_1;
@@ -402,17 +418,24 @@ public class AssignOne {
 			return "(" + _user_id.toString() + "," + _rating_1.toString() + "," + _rating_2.toString() + ")";
 		}
 	}
-	// Custom Array Value
+	
+	/**
+	 * UserAndRatingArrayWritable - used by UserReducer
+	 * An arrayWritable formed by user_id, rating1, rating2 triplet
+	 */
 	public static class UserAndRatingArrayWritable extends ArrayWritable{
+		
 		// Constructor
 		public UserAndRatingArrayWritable() {
 			super(UserAndRatingWritable.class);
 		}
 		
+		// Explicit Constructor
 		public UserAndRatingArrayWritable(UserAndRatingWritable[] values) {
 			super(UserAndRatingWritable.class, values);
 		}
-
+		
+		// Getter
 		@Override
 		public UserAndRatingWritable[] get() {
 			Writable[] writableArray = super.get();
@@ -439,53 +462,47 @@ public class AssignOne {
 			return string;
 		}
 	}
-	// Main
+	
 	public static void main(String[] args) throws Exception {
-		// Delete old folders
+		// Delete old folders if exist
 		File temp_folder_to_delete = new File("TEMP");
 		if(temp_folder_to_delete.exists()) {
 			FileUtils.cleanDirectory(temp_folder_to_delete);
 			FileUtils.deleteDirectory(temp_folder_to_delete);
-
-			// DEBUG
-			if(!temp_folder_to_delete.exists())
-				System.out.println("Folder " + temp_folder_to_delete.getName()+ " deleted.");
 		}
 		
 		File output_folder_to_delete = new File("output");
 		if(output_folder_to_delete.exists()) {
 			FileUtils.cleanDirectory(output_folder_to_delete);
 			FileUtils.deleteDirectory(output_folder_to_delete);
-
-			// DEBUG
-			if (!output_folder_to_delete.exists())
-				System.out.println("Folder " + output_folder_to_delete.getName()+ " deleted.");
 		}
-		// Init
-		Configuration conf = new Configuration();
-		Path temp_folder = new Path("TEMP");
 		
-		// Map Reduce 1
-		Job job1 = Job.getInstance(conf,"MapReduce1");
+		// Initialise
+		Configuration conf = new Configuration();
+		Path temp_folder = new Path("TEMP"); // Store intermediate files to the "TEMP" folder
+		
+		// MapReduce - File to User Info
+		Job job1 = Job.getInstance(conf,"UserMapReduce");
 		job1.setJarByClass(AssignOne.class);
-		job1.setMapperClass(Mapper1.class);
-		job1.setReducerClass(Reducer1.class);
+		job1.setMapperClass(UserMapper.class);
+		job1.setReducerClass(UserReducer.class);
 		job1.setMapOutputKeyClass(Text.class);
 		job1.setMapOutputValueClass(MovieAndRatingWritable.class);
 		job1.setOutputKeyClass(Text.class);
 		job1.setOutputValueClass(MovieAndRatingArrayWritable.class);
-		job1.setOutputFormatClass(SequenceFileOutputFormat.class); //Enable when need to pass object to the 2nd MapReduce, else print to file
+		job1.setOutputFormatClass(SequenceFileOutputFormat.class);
 		FileInputFormat.addInputPath(job1, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job1, new Path(temp_folder.toString()));
 		
 		if(!job1.waitForCompletion(true)) {
 			System.exit(1);
 		}
-		// Map Reduce 2
-		Job job2 = Job.getInstance(conf,"MapReduce2");
+		
+		// Map Reduce - User Info to Movie Pairs
+		Job job2 = Job.getInstance(conf,"MapReduceMoviePair");
 		job2.setJarByClass(AssignOne.class);
-		job2.setMapperClass(Mapper2.class);
-		job2.setReducerClass(Reducer2.class);
+		job2.setMapperClass(MoviePairMapper.class);
+		job2.setReducerClass(MoviePairReducer.class);
 		job2.setMapOutputKeyClass(MoviePair.class);
 		job2.setMapOutputValueClass(UserAndRatingWritable.class);
 		job2.setOutputKeyClass(MoviePair.class);
