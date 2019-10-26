@@ -17,7 +17,7 @@ import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 
-public class AssignOne {
+public class AssignOnez3451444 {
 	/**
 	 * UserMapper: Maps the input file to key-value pairs
 	 * 1. Extract info from the file, only interested in user_id, movie_id and rating
@@ -483,7 +483,7 @@ public class AssignOne {
 		
 		// MapReduce - File to User Info
 		Job job1 = Job.getInstance(conf,"UserMapReduce");
-		job1.setJarByClass(AssignOne.class);
+		job1.setJarByClass(AssignOnez3451444.class);
 		job1.setMapperClass(UserMapper.class);
 		job1.setReducerClass(UserReducer.class);
 		job1.setMapOutputKeyClass(Text.class);
@@ -500,7 +500,7 @@ public class AssignOne {
 		
 		// Map Reduce - User Info to Movie Pairs
 		Job job2 = Job.getInstance(conf,"MapReduceMoviePair");
-		job2.setJarByClass(AssignOne.class);
+		job2.setJarByClass(AssignOnez3451444.class);
 		job2.setMapperClass(MoviePairMapper.class);
 		job2.setReducerClass(MoviePairReducer.class);
 		job2.setMapOutputKeyClass(MoviePair.class);
